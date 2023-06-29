@@ -18,8 +18,16 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 #include <zmk/wpm.h>
 
+// Determines how often the WPM counter refreshes
 #define WPM_UPDATE_INTERVAL_MS 250
-#define WPM_RESET_INTERVAL_SECONDS 5
+
+// Determines how many seconds to wait after all keys are released
+// before zeroing out the WPM counter
+#define WPM_RESET_INTERVAL_SECONDS 8
+
+// When the WPM drops below this threshold the WPM will be displayed as 0
+// (helpful if you have a long reset interval)
+#define WPM_ZERO_THRESHOLD 5
 
 const uint16_t UPDATES_PER_MIN = 60000 / WPM_UPDATE_INTERVAL_MS;
 const uint8_t UPDATES_PER_SECOND = 1000 / WPM_UPDATE_INTERVAL_MS;
@@ -53,8 +61,9 @@ int wpm_event_listener(const zmk_event_t *eh) {
 void wpm_work_handler(struct k_work *work) {
     wpm_update_counter++;
     wpm_state = (key_pressed_count / (CHARS_PER_WORD * wpm_update_counter)) * UPDATES_PER_MIN;
+    wpm_state = wpm_state <= WPM_ZERO_THRESHOLD ? 0 : wpm_state;
 
-    if (wpm_state != 0 || last_wpm_state != wpm_state) {
+    if (wpm_state > 0 || last_wpm_state != wpm_state) {
         LOG_DBG("Raised WPM state changed %d wpm_update_counter %d", wpm_state, wpm_update_counter);
 
         ZMK_EVENT_RAISE(
