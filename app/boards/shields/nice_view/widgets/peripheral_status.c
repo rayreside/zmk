@@ -22,7 +22,6 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/usb.h>
 #include <zmk/ble.h>
 
-LV_IMG_DECLARE(balloon);
 LV_IMG_DECLARE(mountain);
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);

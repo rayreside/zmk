@@ -22,13 +22,15 @@
             layers = <LAYERS>; \
         };
 
-#define MOD_MORPH(NAME, KEY1, KEY2) NAME: NAME { \
+#define MOD_MORPH(NAME, KEY1, KEY2, MODS) NAME: NAME { \
             compatible = "zmk,behavior-mod-morph"; \
             label = # NAME; \
             #binding-cells = <0>; \
             bindings = <KEY1>, <KEY2>; \
-            mods = <(MOD_LSFT|MOD_RSFT)>; \
+            mods = MODS; \
         };
+#define LRSFT <(MOD_LSFT|MOD_RSFT)>
+
 #define MACRO(NAME, ...) ZMK_MACRO(NAME, \
   wait-ms = <10>; \
   tap-ms = <10>; \
@@ -73,19 +75,25 @@
         };
     };
     behaviors {
-      MOD_MORPH(end_snr, &kp END, &snap_right)
-      MOD_MORPH(home_snl, &kp HOME, &snap_left)
-      MOD_MORPH(eq_neq, &kp EQUAL, &neq)
-      MOD_MORPH(spc_und, &kp SPACE, &kp UNDER)
-      MOD_MORPH(minus_d, &kp MINUS, &min_min)
-      MOD_MORPH(plus_d, &kp PLUS, &plus_plus)
-      MOD_MORPH(gte_rarr, &gte, &rarr)
+      MOD_MORPH(end_snr, &kp END, &snap_right, LRSFT)
+      MOD_MORPH(home_snl, &kp HOME, &snap_left, LRSFT)
+      MOD_MORPH(eq_eeq, &kp EQUAL, &eq_eq, LRSFT)
+      MOD_MORPH(excl_neq, &kp EXCL, &neq, LRSFT)
+      MOD_MORPH(spc_und, &kp SPACE, &kp UNDER, <(MOD_LSFT)>)
+      MOD_MORPH(spc_min, &kp SPACE, &kp MINUS, <(MOD_RSFT)>)
+      MOD_MORPH(minus_d, &kp MINUS, &min_min, LRSFT)
+      MOD_MORPH(plus_d, &kp PLUS, &plus_plus, LRSFT)
+      MOD_MORPH(gte_rarr, &gte, &rarr, LRSFT)
+      MOD_MORPH(peq_meq, &peq, &neq, LRSFT)
+      MOD_MORPH(col_dcol, &kp COLON, &col_col, LRSFT)
+      MOD_MORPH(pipe_or, &kp PIPE, &or_or, LRSFT)
+      MOD_MORPH(amps_and, &kp AMPS, &and_and, LRSFT)
       hm: homerow_mods {
         compatible = "zmk,behavior-hold-tap";
         label = "HOMEROW_MODS";
         #binding-cells = <2>;
         flavor = "balanced";
-        tapping-term-ms = <170>;
+        tapping-term-ms = <160>;
         quick-tap-ms = <125>;
         global-quick-tap;
         bindings = <&kp>, <&kp>;
@@ -149,6 +157,12 @@
         TAP(&kp PLUS),
         TAP(&kp EQUAL)
       )
+      MACRO(meq,
+        RELEASE(&kp LSHFT),
+        RELEASE(&kp RSHFT),
+        TAP(&kp MINUS),
+        TAP(&kp EQUAL)
+      )
       MACRO(trip_quote, 
         TAP(&kp DQT),
         TAP(&kp DQT),
@@ -163,6 +177,24 @@
         RELEASE(&kp RSFT),
         TAP(&kp MINUS),
         TAP(&kp MINUS)
+      )
+      MACRO(and_and,
+        TAP(&kp AMPS),
+        TAP(&kp AMPS)
+      )
+      MACRO(or_or,
+        TAP(&kp PIPE),
+        TAP(&kp PIPE)
+      )
+      MACRO(col_col,
+        TAP(&kp COLON),
+        TAP(&kp COLON)
+      )
+      MACRO(eq_eq,
+        RELEASE(&kp LSFT),
+        RELEASE(&kp RSFT),
+        TAP(&kp EQUAL),
+        TAP(&kp EQUAL)
       )
       MACRO(rarr,
         RELEASE(&kp LSFT),
@@ -186,23 +218,38 @@
     };
 };
 / {
+    snake_caps: behavior_snake_caps_word {
+        compatible = "zmk,behavior-caps-word";
+        label = "SNAKE_CAPS";
+        #binding-cells = <0>;
+        continue-list = <UNDERSCORE MINUS BACKSPACE DELETE SPACE>;
+        mods = <(MOD_LSFT)>;
+    };
+    kebab_caps: behavior_kebab_caps_word {
+        compatible = "zmk,behavior-caps-word";
+        label = "kebab_CAPS";
+        #binding-cells = <0>;
+        continue-list = <UNDERSCORE MINUS BACKSPACE DELETE SPACE>;
+        mods = <(MOD_RSFT)>;
+    };
+};
+/ {
     combos {
         compatible = "zmk,combos";
         COMBO(tilde, 0 1, &kp TILDE, MAC WIN LOWER, COMBO_TIMEOUT)
-        COMBO(equal, 1 2, &eq_neq, MAC WIN LOWER, COMBO_TIMEOUT)
+        COMBO(grave, 8 9, &kp GRAVE, MAC WIN LOWER, COMBO_TIMEOUT) 
+        COMBO(equal, 1 2, &eq_eeq, MAC WIN LOWER, COMBO_TIMEOUT)
         COMBO(plus_equal, 1 2 3, &peq, MAC WIN LOWER, COMBO_TIMEOUT)
+        COMBO(minus_equal, 6 7 8, &meq, MAC WIN LOWER, COMBO_TIMEOUT)
         COMBO(plus_d, 2 3, &plus_d, MAC WIN LOWER, COMBO_TIMEOUT)
-        COMBO(grave, 8 9, &kp GRAVE, MAC WIN LOWER, COMBO_TIMEOUT)
-        COMBO(bslh, 18 19, &kp BSLH, MAC WIN LOWER, VERY_FAST_COMBO_TIMEOUT)
-        COMBO(tqt, 6 7 8, &trip_quote, MAC WIN LOWER, COMBO_TIMEOUT)
         COMBO(minus_d, 6 7, &minus_d, MAC WIN LOWER, FAST_COMBO_TIMEOUT)
-        COMBO(under, 7 8, &kp UNDER, MAC WIN LOWER, FAST_COMBO_TIMEOUT)
+        COMBO(under, 7 8, &kp UNDER, MAC WIN LOWER, FAST_COMBO_TIMEOUT)        
         COMBO(home_snl, 10 20, &home_snl, MAC WIN LOWER, COMBO_TIMEOUT)
-        COMBO(end_snr, 19 29, &end_snr, MAC WIN LOWER, COMBO_TIMEOUT)
-        COMBO(caps_word, 0 10, &caps_word, MAC WIN LOWER, COMBO_TIMEOUT)
+        COMBO(end_snr, 19 29, &end_snr, MAC WIN LOWER, COMBO_TIMEOUT)     
+        COMBO(snake_caps, 0 10, &snake_caps, MAC WIN, COMBO_TIMEOUT)
         COMBO(del, 31 32, &kp DEL, MAC WIN LOWER, COMBO_TIMEOUT)
-        COMBO(colon, 33 34, &kp COLON, MAC WIN LOWER, COMBO_TIMEOUT)
-        COMBO(quote, 9 19, &kp DQT, MAC WIN LOWER, COMBO_TIMEOUT)
+        COMBO(colon, 33 34, &col_dcol, MAC WIN LOWER, COMBO_TIMEOUT)     
+        COMBO(quote, 7 17, &kp DQT, MAC WIN LOWER, COMBO_TIMEOUT)
         COMBO(lbrc, 20 21, &kp LBRC, MAC WIN LOWER, COMBO_TIMEOUT)
         COMBO(rbrc, 28 29, &kp RBRC, MAC WIN LOWER, FAST_COMBO_TIMEOUT)
         COMBO(lbkt, 22 23, &kp LBKT, MAC WIN LOWER, COMBO_TIMEOUT)
@@ -219,7 +266,12 @@
         COMBO(down, 12 22, &kp DOWN, MAC WIN LOWER, COMBO_TIMEOUT)
         COMBO(right, 13 23, &kp RIGHT, MAC WIN LOWER, COMBO_TIMEOUT)
         COMBO(b, 25 26, &kp B, LOWER, COMBO_TIMEOUT)
-        COMBO(pipe, 10 11, &kp PIPE, MAC WIN LOWER, FAST_COMBO_TIMEOUT)
+        COMBO(pipe, 3 13, &pipe_or, MAC WIN LOWER, COMBO_TIMEOUT)
+        COMBO(bslh, 8 18, &kp BSLH, MAC WIN LOWER, COMBO_TIMEOUT)
+        COMBO(excl, 1 11, &excl_neq, MAC WIN LOWER, COMBO_TIMEOUT)
+        COMBO(amps, 6 16, &amps_and, MAC WIN LOWER, COMBO_TIMEOUT)
+        COMBO(perc, 4 14, &kp PRCNT, MAC WIN LOWER, COMBO_TIMEOUT)
+        COMBO(hash, 5 15, &kp HASH, MAC WIN LOWER, COMBO_TIMEOUT)
     };
 };
 / {
@@ -236,7 +288,7 @@
         &kp Q       &kp W      &kp F      &kp P       &kp B  &kp J &kp L       &kp U      &kp Y      &kp SQT     
         &hm LSHFT A &hm LALT R &hm LGUI S &hm LCTRL T &kp G  &kp M &hm RCTRL N &hm RGUI E &hm RALT I &hm RSHFT O 
         &kp Z       &kp X      &kp C      &kp D       &kp V  &kp K &kp H       &kp COMMA  &kp DOT    &kp FSLH    
-        &kp ESC &lt LOWER TAB &mt LSHFT BKSP &mt RSHFT SPACE &lt RAISE SEMI &kp RET
+        &kp ESC &lt LOWER TAB &mt LSHFT BKSP &spc_und &lt RAISE SEMI &mt RSFT RET
       >;
     };
     
@@ -251,7 +303,7 @@
         &kp Q       &kp W      &kp F       &kp P      &kp B  &kp J &kp L       &kp U       &kp Y      &kp SQT     
         &hm LSHFT A &hm LALT R &hm LCTRL S &hm LGUI T &kp G  &kp M &hm RGUI N  &hm RCTRL E &hm RALT I &hm RSHFT O 
         &kp Z       &kp X      &kp C       &kp D      &kp V  &kp K &kp H       &kp COMMA   &kp DOT    &kp FSLH    
-        &kp ESC &lt LOWER TAB &mt LSHFT BKSP &mt RSHFT SPACE &lt RAISE SEMI &kp RET
+        &kp ESC &lt LOWER TAB &mt LSHFT BKSP &spc_und &lt RAISE SEMI &mt RSFT RET
       >;
     };
     
