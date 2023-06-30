@@ -140,7 +140,7 @@ static void draw_wpm(lv_obj_t *widget, lv_color_t cbuf[], struct status_state st
     }
     char wpm_text[6] = {};
     snprintf(wpm_text, sizeof(wpm_text), "%d", state.wpm);
-    lv_canvas_draw_text(canvas, -2, 28, 50, &label_dsc, wpm_text);
+    lv_canvas_draw_text(canvas, -4, 28, 50, &label_dsc, wpm_text);
 
     // Rotate canvas
     rotate_canvas(canvas, cbuf);
@@ -178,7 +178,7 @@ static void draw_bt_prof(lv_obj_t *widget, lv_color_t cbuf[], struct status_stat
 
         // Writing the bt profile label
         char label[2];
-        label[0] = 0x30 + i;
+        label[0] = 0x31 + i;
         label[1] = '\0';
         lv_canvas_draw_text(canvas, circle_offsets[i][0] - 7, circle_offsets[i][1] - 8, 14,
                             (selected ? &label_dsc_black : &label_dsc), label);
