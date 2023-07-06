@@ -10,3 +10,4 @@ __pycache__
 .vscode/c_cpp_properties.json
 .vscode/settings.json
 .gitignore
+app/boards/shields/nice_view/widgets/peripheral_status.c

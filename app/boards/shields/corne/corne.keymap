@@ -11,9 +11,7 @@
 #include <dt-bindings/zmk/ext_power.h>
 
 #define COMBO_TIMEOUT 60
-#define FAST_COMBO_TIMEOUT 30
-#define VERY_FAST_COMBO_TIMEOUT 20
-
+#define FAST_COMBO_TIMEOUT 35
 // Cleaning up long code segments
 #define COMBO(NAME, KEYS, MAPPING, LAYERS, DELAY) combo_ ## NAME { \
             timeout-ms = <DELAY>; \
@@ -29,11 +27,19 @@
             bindings = <KEY1>, <KEY2>; \
             mods = MODS; \
         };
+#define MM_REPEAT(NAME, KEY) NAME: NAME { \
+            compatible = "zmk,behavior-mod-morph"; \
+            label = # NAME; \
+            #binding-cells = <0>; \
+            bindings = <&kp KEY>, <&repeat_key KEY>; \
+            mods = LRSFT; \
+        };
+
 #define LRSFT <(MOD_LSFT|MOD_RSFT)>
 
 #define MACRO(NAME, ...) ZMK_MACRO(NAME, \
-  wait-ms = <10>; \
-  tap-ms = <10>; \
+  wait-ms = <5>; \
+  tap-ms = <5>; \
   bindings = __VA_ARGS__;)
 #define PRESS(KEY) <&macro_press KEY>
 #define RELEASE(KEY) <&macro_release KEY>
@@ -44,7 +50,7 @@
         &kp Q &kp W &kp F &kp P &kp B  &kp J &kp L &kp U &kp Y &kp SQT     \
         &kp A &kp R &kp S &kp T &kp G  &kp M &kp N &kp E &kp I &kp O \
         &kp Z &kp X &kp C &kp D &kp V  &kp K &kp H &kp COMMA  &kp DOT  &kp FSLH    \
-        &tog LAYER_NUM &lt LOWER TAB &kp BKSP SPACE_KEY &lt RAISE SEMI &mt RSFT RET\
+        &tog LAYER_NUM &lt LOWER TAB &mt LSHFT BKSP SPACE_KEY &lt RAISE SEMI &mt RSFT RET\
       >;\
     };
 // layers
@@ -87,19 +93,29 @@
         };
     };
     behaviors {
-      MOD_MORPH(end_snr, &kp END, &snap_right, LRSFT)
-      MOD_MORPH(home_snl, &kp HOME, &snap_left, LRSFT)
-      MOD_MORPH(eq_eeq, &kp EQUAL, &eq_eq, LRSFT)
-      MOD_MORPH(excl_neq, &kp EXCL, &neq, LRSFT)
-      MOD_MORPH(minus_d, &kp MINUS, &min_min, LRSFT)
-      MOD_MORPH(plus_d, &kp PLUS, &plus_plus, LRSFT)
-      MOD_MORPH(gte_rarr, &gte, &rarr, LRSFT)
-      MOD_MORPH(peq_meq, &peq, &neq, LRSFT)
-      MOD_MORPH(col_dcol, &kp COLON, &col_col, LRSFT)
-      MOD_MORPH(pipe_or, &kp PIPE, &or_or, LRSFT)
-      MOD_MORPH(amps_and, &kp AMPS, &and_and, LRSFT)
-      MOD_MORPH(snake_kebab, &tog SNAKE, &tog KEBAB, LRSFT)
-      MOD_MORPH(camel_path, &tog CAMEL, &tog PATH, LRSFT)
+      // NORMAL MOD MORPH
+      MOD_MORPH(end_snr,      &kp END,    &snap_right, LRSFT)
+      MOD_MORPH(home_snl,     &kp HOME,   &snap_left, LRSFT)
+      MOD_MORPH(excl_neq,     &kp EXCL,   &neq, LRSFT)
+      MOD_MORPH(gte_shr,      &gte,       &gt_d, LRSFT)
+      MOD_MORPH(lte_shl,      &lte,       &lt_d, LRSFT)
+      MOD_MORPH(peq_meq,      &peq,       &neq, LRSFT)
+      MOD_MORPH(rptr_rarr,    &rptr,      &rarr, LRSFT)
+      MOD_MORPH(snake_kebab,  &tog SNAKE, &tog KEBAB, LRSFT)
+      MOD_MORPH(camel_path,   &tog CAMEL, &tog PATH, LRSFT)
+      // DOUBLE MOD MORPH KEYS
+      MM_REPEAT(minus_d,  MINUS)
+      MM_REPEAT(plus_d,   PLUS)
+      MM_REPEAT(col_d,    COLON)
+      MM_REPEAT(eq_d,     EQUAL)
+      MM_REPEAT(pipe_d,   PIPE)
+      MM_REPEAT(and_d,    AMPS)
+      MM_REPEAT(perc_d,   PRCNT)
+      MM_REPEAT(lpar_d,   LPAR)
+      MM_REPEAT(rpar_d,   RPAR)
+      MM_REPEAT(lt_d,     LT)
+      MM_REPEAT(gt_d,     GT)
+      // HOME ROW MODS
       hm: homerow_mods {
         compatible = "zmk,behavior-hold-tap";
         label = "HOMEROW_MODS";
@@ -132,14 +148,14 @@
         RELEASE(&kp LALT),
         RELEASE(&kp LGUI)
       )
-      MACRO(desktop_left,
+      MACRO(desk_left,
         RELEASE(&kp LSHFT),
         RELEASE(&kp RSHFT),
         PRESS(&kp LCTRL),
         TAP(&kp LEFT),
         RELEASE(&kp LCTRL)  
       )
-      MACRO(desktop_right,
+      MACRO(desk_right,
         RELEASE(&kp LSHFT),
         RELEASE(&kp RSHFT),
         PRESS(&kp LCTRL),
@@ -180,34 +196,6 @@
         TAP(&kp DQT),
         TAP(&kp DQT)
       )
-      MACRO(plus_plus,
-        TAP(&kp PLUS),
-        TAP(&kp PLUS)
-      )
-      MACRO(min_min,
-        RELEASE(&kp LSFT),
-        RELEASE(&kp RSFT),
-        TAP(&kp MINUS),
-        TAP(&kp MINUS)
-      )
-      MACRO(and_and,
-        TAP(&kp AMPS),
-        TAP(&kp AMPS)
-      )
-      MACRO(or_or,
-        TAP(&kp PIPE),
-        TAP(&kp PIPE)
-      )
-      MACRO(col_col,
-        TAP(&kp COLON),
-        TAP(&kp COLON)
-      )
-      MACRO(eq_eq,
-        RELEASE(&kp LSFT),
-        RELEASE(&kp RSFT),
-        TAP(&kp EQUAL),
-        TAP(&kp EQUAL)
-      )
       MACRO(rarr,
         RELEASE(&kp LSFT),
         RELEASE(&kp RSFT),
@@ -227,48 +215,64 @@
         TAP(&to MAC),
         TAP(&bt BT_SEL 2)
       )
+      repeat_key: repeat_key {
+            label = "repeat-key";
+            compatible = "zmk,behavior-macro-one-param";
+            #binding-cells = <1>;
+            bindings = 
+              RELEASE(&kp LSFT),
+              <&macro_param_1to1>,
+              TAP(&kp MACRO_PLACEHOLDER),
+              <&macro_param_1to1>,
+              TAP(&kp MACRO_PLACEHOLDER);
+        };
     };
 };
 / {
     combos {
         compatible = "zmk,combos";
-        COMBO(tilde, 0 1, &kp TILDE, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(grave, 8 9, &kp GRAVE, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT) 
-        COMBO(equal, 1 2, &eq_eeq, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(plus_equal, 1 2 3, &peq, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(minus_equal, 6 7 8, &meq, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(plus_d, 2 3, &plus_d, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(minus_d, 6 7, &minus_d, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT)
-        COMBO(under, 7 8, &kp UNDER, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT)        
-        COMBO(home_snl, 10 20, &home_snl, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(end_snr, 19 29, &end_snr, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)     
-        COMBO(snake_kebab, 0 10, &snake_kebab, MAC WIN, COMBO_TIMEOUT)
-        COMBO(camel_path, 9 19, &camel_path, MAC WIN, COMBO_TIMEOUT)
-        COMBO(del, 31 32, &kp DEL, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(colon, 33 34, &col_dcol, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)     
-        COMBO(quote, 7 17, &kp DQT, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(lbrc, 20 21, &kp LBRC, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(rbrc, 28 29, &kp RBRC, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT)
-        COMBO(lbkt, 22 23, &kp LBKT, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(rbkt, 26 27, &kp RBKT, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(lpar, 21 22, &kp LPAR, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(rpar, 27 28, &kp RPAR, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(dt_right, 23 24, &desktop_right, MAC, COMBO_TIMEOUT)
-        COMBO(dt_left, 25 26, &desktop_left, MAC, COMBO_TIMEOUT)
-        COMBO(rptr, 16 26, &rptr, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(lte, 17 27, &lte, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(gte, 18 28, &gte_rarr, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(left, 11 21, &kp LEFT, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(up, 2 12, &kp UP, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(down, 12 22, &kp DOWN, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(right, 13 23, &kp RIGHT, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(b, 25 26, &kp B, LOWER, COMBO_TIMEOUT)
-        COMBO(pipe, 3 13, &pipe_or, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(bslh, 8 18, &kp BSLH, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(excl, 1 11, &excl_neq, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(amps, 6 16, &amps_and, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(perc, 4 14, &kp PRCNT, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
-        COMBO(hash, 5 15, &kp HASH, MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        // GENERAL KEYS
+        COMBO(tilde,        0 1,    &kp TILDE,    MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(grave,        8 9,    &kp GRAVE,    MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT) 
+        COMBO(equal,        1 2,    &eq_d,        MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(plus_equal,   1 2 3,  &peq,         MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(minus_equal,  6 7 8,  &meq,         MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(plus_d,       2 3,    &plus_d,      MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(home_snl,     10 20,  &home_snl,    MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(end_snr,      19 29,  &end_snr,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(del,          31 32,  &kp DEL,      MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(colon,        33 34,  &col_d,       MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(quote,        7 17,   &kp DQT,      MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(lbrc,         20 21,  &kp LBRC,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(rbkt,         26 27,  &kp RBKT,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(lpar,         21 22,  &kp LPAR,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(rpar,         27 28,  &kp RPAR,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(rptr,         16 26,  &rptr_rarr,   MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(lte,          17 27,  &lte_shl,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(gte,          18 28,  &gte_shr,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(left,         11 21,  &kp LEFT,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(up,           2 12,   &kp UP,       MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(down,         12 22,  &kp DOWN,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(right,        13 23,  &kp RIGHT,    MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(pipe,         3 13,   &pipe_d,      MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(bslh,         8 18,   &kp BSLH,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(excl,         1 11,   &excl_neq,    MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(amps,         6 16,   &and_d,       MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(perc,         4 14,   &perc_d,      MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        COMBO(hash,         5 15,   &kp HASH,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
+        // FAST
+        COMBO(minus_d,      6 7,    &minus_d,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT) // lu
+        COMBO(under,        7 8,    &kp UNDER,    MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT) // uy
+        COMBO(rbrc,         28 29,  &kp RBRC,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT) // ./
+        COMBO(lbkt,         22 23,  &kp LBKT,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT) // cd
+        // NO LOWER
+        COMBO(snake_kebab,  0 10,   &snake_kebab, MAC WIN SNAKE CAMEL PATH KEBAB,       COMBO_TIMEOUT)
+        COMBO(camel_path,   9 19,   &camel_path,  MAC WIN SNAKE CAMEL PATH KEBAB,       COMBO_TIMEOUT)
+        // LOWER ONLY
+        COMBO(b,            25 26,  &kp B,        LOWER,                                COMBO_TIMEOUT)
+        // MAC ONLY
+        COMBO(dt_right,     23 24,  &desk_right,  MAC,                                  COMBO_TIMEOUT)
+        COMBO(dt_left,      25 26,  &desk_left,   MAC,                                  COMBO_TIMEOUT)
     };
 };
 / {
@@ -336,12 +340,12 @@
       // | INS  | BACK |  UP  |  FWD | PGUP |   | BRI+ |  VOL+ | (  |  )  | DEL |
       // | CAPS | LEFT | DOWN | RGHT | PRSC |   | AUTO |  MUTE | [  |  ]  |  ;  |
       // | HOME | Z IN | LGUI | ZOUT | PGDN |   | BRI- |  VOL- | {  |  }  | END |
-      //                              |   |   | SHIFT |  |   |
+      //                          |   |   | SHIFT |  |   |
       bindings = <
-        &kp INS  &kp C_AC_BACK  &kp UP     &kp C_AC_FORWARD  &kp PG_UP &kp C_BRI_UP   &kp C_VOL_UP &kp LPAR &kp RPAR  &kp DEL  
-        &kp CAPS &kp LEFT       &kp DOWN   &kp RIGHT         &kp PSCRN &kp C_BRI_AUTO &kp C_MUTE   &kp LBKT &kp RBKT  &kp SEMI 
+        &kp INS  &kp C_AC_BACK    &kp UP   &kp C_AC_FORWARD  &kp PG_UP &kp C_BRI_UP   &kp C_VOL_UP &kp LPAR &kp RPAR  &kp DEL  
+        &kp CAPS &kp LEFT         &kp DOWN &kp RIGHT         &kp PSCRN &kp C_BRI_AUTO &kp C_MUTE   &kp LBKT &kp RBKT  &kp SEMI 
         &kp HOME &kp C_AC_ZOOM_IN &kp LGUI &kp C_AC_ZOOM_OUT &kp PG_DN &kp C_BRI_DN   &kp C_VOL_DN &kp LBRC &kp RBRC  &kp END  
-        &trans    &trans  &kp LSHFT &trans &trans      &trans
+        &trans   &trans           &kp LSHFT                  &trans &trans            &trans
       >;
     };
 
@@ -356,7 +360,7 @@
         &kp F1 &kp F2  &kp F3  &kp F4  &kp B &to_mac1 &out OUT_BLE &to MAC    &ext_power EP_ON  &tog GAME
         &kp F5 &kp F6  &kp F7  &kp F8  &kp G &to_win  &out OUT_TOG &bt BT_PRV &none             &bt BT_PRV      
         &kp F9 &kp F10 &kp F11 &kp F12 &kp T &to_mac2 &out OUT_USB &to WIN    &ext_power EP_OFF &bt BT_CLR     
-        &trans   &trans    &trans  &trans  &trans   &trans
+        &trans &trans  &trans  &trans  &trans         &trans
       >;
     };  
 
@@ -371,7 +375,7 @@
         &kp ESC   &kp Q &kp W &kp E &kp R &kp T &kp N1 &kp N2 &kp N3 &tog GAME
         &kp LSHFT &kp A &kp S &kp D &kp G &kp H &kp N4 &kp N5 &kp N6 &kp F3 
         &kp M     &kp Z &kp X &kp C &kp V &kp B &kp N7 &kp N8 &kp N9 &kp F5 
-        &kp N4          &kp N3      &kp SPACE &kp SPACE  &kp N0       &kp RET
+        &kp N4    &kp N3      &kp SPACE   &kp SPACE    &kp N0 &kp RET
       >;
     };
   };

@@ -1,7 +1,19 @@
 {
   "files.associations": {
     "*.overlay": "dts",
-    "*.keymap": "dts"
+    "*.keymap": "dts",
+    "kernel.h": "c",
+    "display.h": "c",
+    "log.h": "c",
+    "wpm.h": "c",
+    "*.tcc": "c",
+    "chrono": "c",
+    "string_view": "c",
+    "algorithm": "c",
+    "random": "c",
+    "istream": "c",
+    "limits": "c",
+    "numeric": "c"
   },
   "python.formatting.provider": "black",
   "[c]": {

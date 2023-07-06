@@ -22,13 +22,58 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/usb.h>
 #include <zmk/ble.h>
 
-LV_IMG_DECLARE(mountain);
+LV_IMG_DECLARE(dvd_img);
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
 struct peripheral_status_state {
     bool connected;
 };
+
+static int8_t to_x, to_y;
+static int8_t x_vel, y_vel;
+static uint16_t anim_time;
+static lv_anim_t dvd;
+
+#define ANIM_W 108
+#define ANIM_H 29
+
+static void anim_x_cb(void *var, int32_t v) { lv_obj_set_x(var, v); }
+
+static void anim_y_cb(void *var, int32_t v) { lv_obj_set_y(var, v); }
+
+void dvd_work_handler(struct k_work *work);
+
+K_WORK_DEFINE(dvd_work, dvd_work_handler);
+
+void dvd_expiry_function() { k_work_submit(&dvd_work); }
+
+K_TIMER_DEFINE(dvd_timer, dvd_expiry_function, NULL);
+
+void dvd_work_handler(struct k_work *work) {
+    int8_t old_x = to_x;
+    int8_t old_y = to_y;
+    if (old_x == 0 || old_x == ANIM_W)
+        x_vel = -x_vel;
+    if (old_y == 0 || old_y == ANIM_H)
+        y_vel = -y_vel;
+    int8_t del_x, del_y;
+    del_x = x_vel == 1 ? ANIM_W - old_x : old_x;
+    del_y = y_vel == 1 ? ANIM_H - old_y : old_y;
+    int8_t del_xy = del_x > del_y ? del_y : del_x;
+    to_x = del_xy * x_vel + old_x;
+    to_y = del_xy * y_vel + old_y;
+    anim_time = 50 * del_xy;
+
+    lv_anim_set_time(&dvd, anim_time);
+    lv_anim_set_values(&dvd, old_x, to_x);
+    lv_anim_set_exec_cb(&dvd, anim_x_cb);
+    lv_anim_start(&dvd);
+    lv_anim_set_values(&dvd, old_y, to_y);
+    lv_anim_set_exec_cb(&dvd, anim_y_cb);
+    lv_anim_start(&dvd);
+    k_timer_start(&dvd_timer, K_MSEC(anim_time), K_MSEC(anim_time));
+}
 
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], struct status_state state) {
     lv_obj_t *canvas = lv_obj_get_child(widget, 0);
@@ -112,14 +157,24 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, BATTERY_OFFSET, 0);
     lv_canvas_set_buffer(top, widget->cbuf, DISP_WIDTH, BATTERY_HEIGHT, LV_IMG_CF_TRUE_COLOR);
 
-    lv_obj_t *art = lv_img_create(widget->obj);
-    lv_img_set_src(art, &mountain);
-    lv_obj_align(art, LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_t *dvd_obj = lv_img_create(widget->obj);
+    lv_img_set_src(dvd_obj, &dvd_img);
+    lv_obj_align(dvd_obj, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    // Initializing animation
+    lv_anim_init(&dvd);
+    lv_anim_set_var(&dvd, dvd_obj);
+    to_x = 0;
+    to_y = 0;
+    x_vel = 1;
+    y_vel = 1;
 
     sys_slist_append(&widgets, &widget->node);
     widget_battery_status_init();
     widget_peripheral_status_init();
 
+    // Starting animation timer
+    k_timer_start(&dvd_timer, K_MSEC(10), K_MSEC(10));
     return 0;
 }
 
