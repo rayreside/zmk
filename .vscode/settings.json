@@ -13,7 +13,8 @@
     "random": "c",
     "istream": "c",
     "limits": "c",
-    "numeric": "c"
+    "numeric": "c",
+    "stdint.h": "c"
   },
   "python.formatting.provider": "black",
   "[c]": {

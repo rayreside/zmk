@@ -24,55 +24,68 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
 LV_IMG_DECLARE(dvd_img);
 
+#define NUM_FRAMES 1250
+#define NUM_CHUNKS 14961
+
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
 struct peripheral_status_state {
     bool connected;
 };
 
-static int8_t to_x, to_y;
-static int8_t x_vel, y_vel;
-static uint16_t anim_time;
 static lv_anim_t dvd;
 
-#define ANIM_W 108
-#define ANIM_H 29
+extern const uint8_t chunks[NUM_CHUNKS][8];
+extern const uint16_t frames[NUM_FRAMES][64];
 
-static void anim_x_cb(void *var, int32_t v) { lv_obj_set_x(var, v); }
+static uint16_t frame_counter;
+static lv_obj_t *video;
 
-static void anim_y_cb(void *var, int32_t v) { lv_obj_set_y(var, v); }
+K_WORK_DEFINE(anim_work, anim_work_handler);
 
-void dvd_work_handler(struct k_work *work);
+void anim_expiry_function() { k_work_submit(&anim_work); }
 
-K_WORK_DEFINE(dvd_work, dvd_work_handler);
+K_TIMER_DEFINE(anim_timer, anim_expiry_function, NULL);
 
-void dvd_expiry_function() { k_work_submit(&dvd_work); }
-
-K_TIMER_DEFINE(dvd_timer, dvd_expiry_function, NULL);
-
-void dvd_work_handler(struct k_work *work) {
-    int8_t old_x = to_x;
-    int8_t old_y = to_y;
-    if (old_x == 0 || old_x == ANIM_W)
-        x_vel = -x_vel;
-    if (old_y == 0 || old_y == ANIM_H)
-        y_vel = -y_vel;
-    int8_t del_x, del_y;
-    del_x = x_vel == 1 ? ANIM_W - old_x : old_x;
-    del_y = y_vel == 1 ? ANIM_H - old_y : old_y;
-    int8_t del_xy = del_x > del_y ? del_y : del_x;
-    to_x = del_xy * x_vel + old_x;
-    to_y = del_xy * y_vel + old_y;
-    anim_time = 50 * del_xy;
-
-    lv_anim_set_time(&dvd, anim_time);
-    lv_anim_set_values(&dvd, old_x, to_x);
-    lv_anim_set_exec_cb(&dvd, anim_x_cb);
-    lv_anim_start(&dvd);
-    lv_anim_set_values(&dvd, old_y, to_y);
-    lv_anim_set_exec_cb(&dvd, anim_y_cb);
-    lv_anim_start(&dvd);
-    k_timer_start(&dvd_timer, K_MSEC(anim_time), K_MSEC(anim_time));
+void anim_work_handler(struct k_work *work) {
+    const uint16_t *frame_compressed = frames[frame_counter];
+    // Each frame is 64x64/8 = 512 bytes
+    uint8_t new_frame[520] = {
+        0x00, 0x00, 0x00, 0xff, /*Color of index 0*/
+        0xff, 0xff, 0xff, 0xff  /*Color of index 1*/
+    };
+    // Uncompressing the frames
+    uint8_t chunk_idx = 0;
+    // Iterating through each row of chunks, 1 chunk = 8x8 pixels or 8 bytes
+    for (int c_row = 0; c_row < 8; c_row++) {
+        // Iterating through each column of chunks
+        for (int c_col = 0; c_col < 8; c_col++) {
+            const uint8_t *chunk_data = chunks[frame_compressed[chunk_idx]];
+            for (int i = 0; i < 8; i++) {
+                // Calculating the byte index
+                // 8 bytes per row, 64 bytes per 8 rows/1 chunk row
+                // 1 byte per 8 columns/1 chunk column
+                // 8 bytes reserved for header
+                new_frame[c_row * 64 + i * 8 + c_col + 8] = chunk_data[i];
+            }
+            chunk_idx++;
+        }
+    }
+    lv_img_dsc_t frame = {
+        .header.cf = LV_IMG_CF_INDEXED_1BIT,
+        .header.always_zero = 0,
+        .header.reserved = 0,
+        .header.w = 64,
+        .header.h = 64,
+        .data_size = 520,
+        .data = new_frame,
+    };
+    lv_draw_img_dsc_t img_dsc;
+    lv_draw_img_dsc_init(&img_dsc);
+    lv_canvas_draw_img(video, 0, 0, &frame, &img_dsc);
+    frame_counter = (frame_counter + 1) % NUM_FRAMES;
+    // Set timer to go off when animation finishes
+    k_timer_start(&anim_timer, K_MSEC(67), K_MSEC(67));
 }
 
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], struct status_state state) {
@@ -157,24 +170,17 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, BATTERY_OFFSET, 0);
     lv_canvas_set_buffer(top, widget->cbuf, DISP_WIDTH, BATTERY_HEIGHT, LV_IMG_CF_TRUE_COLOR);
 
-    lv_obj_t *dvd_obj = lv_img_create(widget->obj);
-    lv_img_set_src(dvd_obj, &dvd_img);
-    lv_obj_align(dvd_obj, LV_ALIGN_TOP_LEFT, 0, 0);
-
-    // Initializing animation
-    lv_anim_init(&dvd);
-    lv_anim_set_var(&dvd, dvd_obj);
-    to_x = 0;
-    to_y = 0;
-    x_vel = 1;
-    y_vel = 1;
-
     sys_slist_append(&widgets, &widget->node);
     widget_battery_status_init();
     widget_peripheral_status_init();
 
+    video = lv_canvas_create(widget->obj);
+    lv_obj_align(video, LV_ALIGN_TOP_LEFT, BATTERY_OFFSET, 0);
+    lv_canvas_set_buffer(video, widget->vbuf, ANIM_SIZE, ANIM_SIZE, LV_IMG_CF_TRUE_COLOR);
+    frame_counter = 0;
+
     // Starting animation timer
-    k_timer_start(&dvd_timer, K_MSEC(10), K_MSEC(10));
+    k_timer_start(&anim_timer, K_MSEC(10), K_MSEC(10));
     return 0;
 }
 

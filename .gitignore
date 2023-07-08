@@ -11,3 +11,4 @@ __pycache__
 .vscode/settings.json
 .gitignore
 app/boards/shields/nice_view/widgets/peripheral_status.c
+app/boards/shields/corne/corne.conf

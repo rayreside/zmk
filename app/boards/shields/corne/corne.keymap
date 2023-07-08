@@ -115,6 +115,7 @@
       MM_REPEAT(rpar_d,   RPAR)
       MM_REPEAT(lt_d,     LT)
       MM_REPEAT(gt_d,     GT)
+      MM_REPEAT(under_d,  UNDER)
       // HOME ROW MODS
       hm: homerow_mods {
         compatible = "zmk,behavior-hold-tap";
@@ -262,7 +263,7 @@
         COMBO(hash,         5 15,   &kp HASH,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, COMBO_TIMEOUT)
         // FAST
         COMBO(minus_d,      6 7,    &minus_d,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT) // lu
-        COMBO(under,        7 8,    &kp UNDER,    MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT) // uy
+        COMBO(under,        7 8,    &under_d,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT) // uy
         COMBO(rbrc,         28 29,  &kp RBRC,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT) // ./
         COMBO(lbkt,         22 23,  &kp LBKT,     MAC WIN SNAKE CAMEL PATH KEBAB LOWER, FAST_COMBO_TIMEOUT) // cd
         // NO LOWER
