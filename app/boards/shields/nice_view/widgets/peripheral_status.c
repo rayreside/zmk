@@ -7,7 +7,6 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/services/bas.h>
-#include <zephyr/random/rand32.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -22,10 +21,7 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/usb.h>
 #include <zmk/ble.h>
 
-LV_IMG_DECLARE(dvd_img);
-
-#define NUM_FRAMES 1250
-#define NUM_CHUNKS 14961
+#define LEN_FRAMES 267191
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
@@ -33,57 +29,85 @@ struct peripheral_status_state {
     bool connected;
 };
 
-static lv_anim_t dvd;
+extern const uint8_t frames_enc[LEN_FRAMES];
+static uint32_t frame_counter;
 
-extern const uint8_t chunks[NUM_CHUNKS][8];
-extern const uint16_t frames[NUM_FRAMES][64];
-
-static uint16_t frame_counter;
 static lv_obj_t *video;
 
 K_WORK_DEFINE(anim_work, anim_work_handler);
 
 void anim_expiry_function() { k_work_submit(&anim_work); }
-
+#define FRAME_SIZE (ANIM_SIZE * ANIM_SIZE / 8 + 8)
 K_TIMER_DEFINE(anim_timer, anim_expiry_function, NULL);
-
+uint8_t new_frame[FRAME_SIZE] = {
+    0x00, 0x00, 0x00, 0xff, /*Color of index 0*/
+    0xff, 0xff, 0xff, 0xff  /*Color of index 1*/
+};
 void anim_work_handler(struct k_work *work) {
-    const uint16_t *frame_compressed = frames[frame_counter];
-    // Each frame is 64x64/8 = 512 bytes
-    uint8_t new_frame[520] = {
-        0x00, 0x00, 0x00, 0xff, /*Color of index 0*/
-        0xff, 0xff, 0xff, 0xff  /*Color of index 1*/
-    };
     // Uncompressing the frames
-    uint8_t chunk_idx = 0;
-    // Iterating through each row of chunks, 1 chunk = 8x8 pixels or 8 bytes
-    for (int c_row = 0; c_row < 8; c_row++) {
-        // Iterating through each column of chunks
-        for (int c_col = 0; c_col < 8; c_col++) {
-            const uint8_t *chunk_data = chunks[frame_compressed[chunk_idx]];
-            for (int i = 0; i < 8; i++) {
-                // Calculating the byte index
-                // 8 bytes per row, 64 bytes per 8 rows/1 chunk row
-                // 1 byte per 8 columns/1 chunk column
-                // 8 bytes reserved for header
-                new_frame[c_row * 64 + i * 8 + c_col + 8] = chunk_data[i];
+    uint16_t f_idx = 8;    // Byte currently being written to in image
+    uint8_t prev_byte = 0; // Partially filled byte from previous run
+    uint8_t byte_idx = 0;  // How many bytes were filled from the last run
+    // 0 Denotes end of current frame (since you can't have a run of zero 0's)
+    for (uint8_t run = frames_enc[frame_counter]; run != 0; run = frames_enc[++frame_counter]) {
+        int8_t bit = run >> 7;   // Fill bit is sign of stored int
+        int8_t len = run & 0x7F; // Length is body of stored int
+        uint8_t byte = 0;        // Byte to write to frame buffer
+        uint8_t new_byte = (uint8_t)(-bit);
+        // Last run left partially filled byte
+        if (byte_idx) {
+            byte = prev_byte | (new_byte >> byte_idx);
+            int8_t bytes_remaining = 8 - byte_idx;
+            // Case where current run is too short to fill up byte entirely
+            if (bytes_remaining > len) {
+                bytes_remaining -= len;
+                prev_byte = (byte >> bytes_remaining) << bytes_remaining;
+                byte_idx = byte_idx + len;
+                continue;
+            } else {
+                len -= bytes_remaining;
+                byte_idx = 0;
+                new_frame[f_idx] = byte;
+                f_idx++;
             }
-            chunk_idx++;
+        }
+        // Write runs of 8 until length reached
+        while (len >= 8) {
+            new_frame[f_idx] = new_byte;
+            len -= 8;
+            f_idx++;
+        }
+        // If run did not end on byte boundary
+        if (len) {
+            byte_idx = len;
+            // Runs of 0's require no additional writes
+            if (bit) {
+                uint8_t bytes_remaining = 8 - byte_idx;
+                prev_byte = (new_byte >> bytes_remaining) << bytes_remaining;
+            } else {
+                prev_byte = new_byte; // Should be 0
+            }
         }
     }
     lv_img_dsc_t frame = {
         .header.cf = LV_IMG_CF_INDEXED_1BIT,
         .header.always_zero = 0,
         .header.reserved = 0,
-        .header.w = 64,
-        .header.h = 64,
-        .data_size = 520,
+        .header.w = ANIM_SIZE,
+        .header.h = ANIM_SIZE,
+        .data_size = FRAME_SIZE,
         .data = new_frame,
     };
+    lv_draw_rect_dsc_t rect_white_dsc;
+    init_rect_dsc(&rect_white_dsc, LVGL_FOREGROUND);
+
+    // Fill background
+    lv_canvas_draw_rect(video, 0, 0, DISP_WIDTH, DISP_WIDTH, &rect_white_dsc);
+
     lv_draw_img_dsc_t img_dsc;
     lv_draw_img_dsc_init(&img_dsc);
-    lv_canvas_draw_img(video, 0, 0, &frame, &img_dsc);
-    frame_counter = (frame_counter + 1) % NUM_FRAMES;
+    lv_canvas_draw_img(video, 2, 2, &frame, &img_dsc);
+    frame_counter = (frame_counter + 1) % LEN_FRAMES;
     // Set timer to go off when animation finishes
     k_timer_start(&anim_timer, K_MSEC(67), K_MSEC(67));
 }
@@ -176,7 +200,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
 
     video = lv_canvas_create(widget->obj);
     lv_obj_align(video, LV_ALIGN_TOP_LEFT, BATTERY_OFFSET, 0);
-    lv_canvas_set_buffer(video, widget->vbuf, ANIM_SIZE, ANIM_SIZE, LV_IMG_CF_TRUE_COLOR);
+    lv_canvas_set_buffer(video, widget->vbuf, DISP_WIDTH, DISP_WIDTH, LV_IMG_CF_TRUE_COLOR);
     frame_counter = 0;
 
     // Starting animation timer

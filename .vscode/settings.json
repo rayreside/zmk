@@ -14,7 +14,8 @@
     "istream": "c",
     "limits": "c",
     "numeric": "c",
-    "stdint.h": "c"
+    "stdint.h": "c",
+    "endpoints.h": "c"
   },
   "python.formatting.provider": "black",
   "[c]": {
