@@ -12,3 +12,5 @@ __pycache__
 .gitignore
 app/boards/shields/nice_view/widgets/peripheral_status.c
 app/boards/shields/corne/corne.conf
+app/boards/shields/nice_view/BadAppleProject/a.out
+app/boards/shields/nice_view/BadAppleProject/decompressor.c

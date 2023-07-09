@@ -21,9 +21,11 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/usb.h>
 #include <zmk/ble.h>
 
-#define LEN_FRAMES 267191
+#define LEN_FRAMES 284272
+#define FPS 10
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
+static const uint16_t ms_per_frame = 1000 / FPS;
 
 struct peripheral_status_state {
     bool connected;
@@ -109,7 +111,7 @@ void anim_work_handler(struct k_work *work) {
     lv_canvas_draw_img(video, 2, 2, &frame, &img_dsc);
     frame_counter = (frame_counter + 1) % LEN_FRAMES;
     // Set timer to go off when animation finishes
-    k_timer_start(&anim_timer, K_MSEC(67), K_MSEC(67));
+    k_timer_start(&anim_timer, K_MSEC(ms_per_frame), K_MSEC(ms_per_frame));
 }
 
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], struct status_state state) {
@@ -199,7 +201,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     widget_peripheral_status_init();
 
     video = lv_canvas_create(widget->obj);
-    lv_obj_align(video, LV_ALIGN_TOP_LEFT, BATTERY_OFFSET, 0);
+    lv_obj_align(video, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_canvas_set_buffer(video, widget->vbuf, DISP_WIDTH, DISP_WIDTH, LV_IMG_CF_TRUE_COLOR);
     frame_counter = 0;
 
