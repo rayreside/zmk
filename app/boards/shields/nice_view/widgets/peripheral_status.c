@@ -21,8 +21,9 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/usb.h>
 #include <zmk/ble.h>
 
-#define LEN_FRAMES 284272
-#define FPS 10
+#define LEN_FRAMES 94310
+#define LEN_DICT 2048
+#define FPS 15
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 static const uint16_t ms_per_frame = 1000 / FPS;
@@ -31,7 +32,8 @@ struct peripheral_status_state {
     bool connected;
 };
 
-extern const uint8_t frames_enc[LEN_FRAMES];
+extern const uint16_t frames_enc[LEN_FRAMES];
+extern const uint8_t frame_dict[LEN_DICT][8];
 static uint32_t frame_counter;
 
 static lv_obj_t *video;
@@ -47,48 +49,23 @@ uint8_t new_frame[FRAME_SIZE] = {
 };
 void anim_work_handler(struct k_work *work) {
     // Uncompressing the frames
-    uint16_t f_idx = 8;    // Byte currently being written to in image
-    uint8_t prev_byte = 0; // Partially filled byte from previous run
-    uint8_t byte_idx = 0;  // How many bytes were filled from the last run
+    uint8_t b_idx = 0; // Current block row index
     // 0 Denotes end of current frame (since you can't have a run of zero 0's)
-    for (uint8_t run = frames_enc[frame_counter]; run != 0; run = frames_enc[++frame_counter]) {
-        int8_t bit = run >> 7;   // Fill bit is sign of stored int
-        int8_t len = run & 0x7F; // Length is body of stored int
-        uint8_t byte = 0;        // Byte to write to frame buffer
-        uint8_t new_byte = (uint8_t)(-bit);
-        // Last run left partially filled byte
-        if (byte_idx) {
-            byte = prev_byte | (new_byte >> byte_idx);
-            int8_t bytes_remaining = 8 - byte_idx;
-            // Case where current run is too short to fill up byte entirely
-            if (bytes_remaining > len) {
-                bytes_remaining -= len;
-                prev_byte = (byte >> bytes_remaining) << bytes_remaining;
-                byte_idx = byte_idx + len;
-                continue;
-            } else {
-                len -= bytes_remaining;
-                byte_idx = 0;
-                new_frame[f_idx] = byte;
-                f_idx++;
+    for (uint16_t run = frames_enc[frame_counter]; run != 0; run = frames_enc[++frame_counter]) {
+        int16_t block_id = run >> 5; // Fill bit is sign of stored int
+        int8_t run_len = run & 0x1F; // Length is body of stored int
+        for (int blocks_printed = 0; blocks_printed < run_len; blocks_printed++) {
+            const uint8_t *chunk_data = frame_dict[block_id];
+            uint8_t b_row = b_idx >> 3 & 0x7;
+            uint8_t b_col = b_idx & 0x7;
+            for (int i = 0; i < 8; i++) {
+                // Calculating the byte index
+                // 8 bytes per row, 64 bytes per 8 rows/1 chunk row
+                // 1 byte per 8 columns/1 chunk column
+                // 8 bytes reserved for header
+                new_frame[b_row * 64 + i * 8 + b_col + 8] = ~chunk_data[i];
             }
-        }
-        // Write runs of 8 until length reached
-        while (len >= 8) {
-            new_frame[f_idx] = new_byte;
-            len -= 8;
-            f_idx++;
-        }
-        // If run did not end on byte boundary
-        if (len) {
-            byte_idx = len;
-            // Runs of 0's require no additional writes
-            if (bit) {
-                uint8_t bytes_remaining = 8 - byte_idx;
-                prev_byte = (new_byte >> bytes_remaining) << bytes_remaining;
-            } else {
-                prev_byte = new_byte; // Should be 0
-            }
+            b_idx++;
         }
     }
     lv_img_dsc_t frame = {
