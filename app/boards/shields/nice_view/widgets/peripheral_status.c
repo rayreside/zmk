@@ -10,7 +10,7 @@
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
-
+#include <zephyr/random/rand32.h>
 #include <zmk/display.h>
 #include "peripheral_status.h"
 #include <zmk/events/usb_conn_state_changed.h>
@@ -20,22 +20,36 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/events/split_peripheral_status_changed.h>
 #include <zmk/usb.h>
 #include <zmk/ble.h>
+#include <zephyr/random/rand32.h>
 
 #define LEN_FRAMES 94310
 #define LEN_DICT 2048
 #define FPS 15
+#define UPDATES_PER_FRAME 2000
+#define NUM_SAND 1654
+#define BOARD_R 68
+#define BOARD_C 136
+#define SAND_W 48
+#define SAND_H 100
+#define C_OFFSET 18
+#define R_OFFSET 10
+#define FRAME_L (BOARD_R * BOARD_C / 8 + 8)
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 static const uint16_t ms_per_frame = 1000 / FPS;
+
+typedef enum { BLANK = 0, WALL, SAND, BARRIER } Pixel;
 
 struct peripheral_status_state {
     bool connected;
 };
 
-extern const uint16_t frames_enc[LEN_FRAMES];
-extern const uint8_t frame_dict[LEN_DICT][8];
+extern uint8_t board[BOARD_R][BOARD_C];
+extern uint8_t board_bits[FRAME_L];
+extern uint8_t sand_coords[NUM_SAND][2];
 static uint32_t frame_counter;
-
+static uint32_t lcg;
+static lv_draw_img_dsc_t img_dsc;
 static lv_obj_t *video;
 
 K_WORK_DEFINE(anim_work, anim_work_handler);
@@ -47,48 +61,86 @@ uint8_t new_frame[FRAME_SIZE] = {
     0x00, 0x00, 0x00, 0xff, /*Color of index 0*/
     0xff, 0xff, 0xff, 0xff  /*Color of index 1*/
 };
+static int8_t direction;
+static int8_t same_frames;
+lv_img_dsc_t frame = {.header.cf = LV_IMG_CF_INDEXED_1BIT,
+                      .header.always_zero = 0,
+                      .header.reserved = 0,
+                      .header.w = BOARD_C,
+                      .header.h = BOARD_R,
+                      .data_size = FRAME_L,
+                      .data = board_bits};
 void anim_work_handler(struct k_work *work) {
-    // Uncompressing the frames
-    uint8_t b_idx = 0; // Current block row index
-    // 0 Denotes end of current frame (since you can't have a run of zero 0's)
-    for (uint16_t run = frames_enc[frame_counter]; run != 0; run = frames_enc[++frame_counter]) {
-        int16_t block_id = run >> 5; // Fill bit is sign of stored int
-        int8_t run_len = run & 0x1F; // Length is body of stored int
-        for (int blocks_printed = 0; blocks_printed < run_len; blocks_printed++) {
-            const uint8_t *chunk_data = frame_dict[block_id];
-            uint8_t b_row = b_idx >> 3 & 0x7;
-            uint8_t b_col = b_idx & 0x7;
-            for (int i = 0; i < 8; i++) {
-                // Calculating the byte index
-                // 8 bytes per row, 64 bytes per 8 rows/1 chunk row
-                // 1 byte per 8 columns/1 chunk column
-                // 8 bytes reserved for header
-                new_frame[b_row * 64 + i * 8 + b_col + 8] = ~chunk_data[i];
+    for (int update = 0; update < NUM_SAND; update++) {
+        lcg = lcg * 22695477 + 1;
+        uint16_t sand_idx = lcg % NUM_SAND;
+        uint8_t *sand_selected = sand_coords[sand_idx];
+        uint8_t row = sand_selected[1];
+        uint8_t col = sand_selected[0];
+        bool update = false;
+        uint8_t nr, nc;
+        if (!board[row][col + direction]) {
+            nr = row;
+            nc = col + direction;
+            update = true;
+        } else {
+            bool can_go_left = !board[row - 1][col];
+            bool can_go_right = !board[row + 1][col];
+            nc = col;
+            if (can_go_left & can_go_right) {
+                if (lcg >> 16 & 0x1) {
+                    nr = row - 1;
+                } else {
+                    nr = row + 1;
+                }
+                update = true;
+            } else if (can_go_left) {
+                nr = row - 1;
+                update = true;
+            } else if (can_go_right) {
+                nr = row + 1;
+                update = true;
             }
-            b_idx++;
+        }
+        if (update) {
+            // Updating the game board
+            board[row][col] = BLANK;
+            board[nr][nc] = SAND;
+            // Calculating byte coordinates and value of original pixel
+            uint16_t temp = row * BOARD_C + col;
+            uint16_t byte_idx = (temp >> 3) + 8;
+            uint8_t bit_idx = temp & 0x7;
+            board_bits[byte_idx] ^= (0x80 >> bit_idx);
+            // Calculating byte coordinates and value of new pixel
+            temp = nr * BOARD_C + nc;
+            byte_idx = (temp >> 3) + 8;
+            bit_idx = temp & 0x7;
+            board_bits[byte_idx] ^= (0x80 >> bit_idx);
+            // Updating sand
+            sand_selected[0] = nc;
+            sand_selected[1] = nr;
         }
     }
-    lv_img_dsc_t frame = {
-        .header.cf = LV_IMG_CF_INDEXED_1BIT,
-        .header.always_zero = 0,
-        .header.reserved = 0,
-        .header.w = ANIM_SIZE,
-        .header.h = ANIM_SIZE,
-        .data_size = FRAME_SIZE,
-        .data = new_frame,
-    };
-    lv_draw_rect_dsc_t rect_white_dsc;
-    init_rect_dsc(&rect_white_dsc, LVGL_FOREGROUND);
-
-    // Fill background
-    lv_canvas_draw_rect(video, 0, 0, DISP_WIDTH, DISP_WIDTH, &rect_white_dsc);
-
-    lv_draw_img_dsc_t img_dsc;
-    lv_draw_img_dsc_init(&img_dsc);
-    lv_canvas_draw_img(video, 2, 2, &frame, &img_dsc);
-    frame_counter = (frame_counter + 1) % LEN_FRAMES;
+    lv_canvas_draw_img(video, 0, 0, &frame, &img_dsc);
     // Set timer to go off when animation finishes
     k_timer_start(&anim_timer, K_MSEC(ms_per_frame), K_MSEC(ms_per_frame));
+    for (int r = 32; r < 36; r++) {
+        if (board[r][67] == board[r][68]) {
+            same_frames = 0;
+            return;
+        }
+    }
+    for (int r = 32; r < 35; r++) {
+        if (board[r][67] != board[r + 1][67] || board[r][68] != board[r + 1][68]) {
+            same_frames = 0;
+            return;
+        }
+    }
+    same_frames++;
+    if (same_frames > 15) {
+        same_frames = 0;
+        direction *= -1;
+    }
 }
 
 static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], struct status_state state) {
@@ -100,7 +152,7 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], struct status_state st
     init_rect_dsc(&rect_black_dsc, LVGL_BACKGROUND);
 
     // Fill background
-    lv_canvas_draw_rect(canvas, 0, 0, DISP_WIDTH, BATTERY_HEIGHT, &rect_black_dsc);
+    lv_canvas_draw_rect(canvas, 0, 0, DISP_WIDTH, BATTERY_HEIGHT + 3, &rect_black_dsc);
 
     // Draw battery
     draw_battery(canvas, state);
@@ -171,7 +223,7 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_obj_set_size(widget->obj, 160, 68);
     lv_obj_t *top = lv_canvas_create(widget->obj);
     lv_obj_align(top, LV_ALIGN_TOP_RIGHT, BATTERY_OFFSET, 0);
-    lv_canvas_set_buffer(top, widget->cbuf, DISP_WIDTH, BATTERY_HEIGHT, LV_IMG_CF_TRUE_COLOR);
+    lv_canvas_set_buffer(top, widget->cbuf, DISP_WIDTH, BATTERY_HEIGHT + 3, LV_IMG_CF_TRUE_COLOR);
 
     sys_slist_append(&widgets, &widget->node);
     widget_battery_status_init();
@@ -179,9 +231,12 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
 
     video = lv_canvas_create(widget->obj);
     lv_obj_align(video, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_canvas_set_buffer(video, widget->vbuf, DISP_WIDTH, DISP_WIDTH, LV_IMG_CF_TRUE_COLOR);
+    lv_canvas_set_buffer(video, widget->vbuf, 136, DISP_WIDTH, LV_IMG_CF_TRUE_COLOR);
+    lv_draw_img_dsc_init(&img_dsc);
     frame_counter = 0;
-
+    lcg = sys_rand32_get();
+    direction = 1;
+    same_frames = 0;
     // Starting animation timer
     k_timer_start(&anim_timer, K_MSEC(10), K_MSEC(10));
     return 0;
