@@ -25,7 +25,6 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define LEN_FRAMES 94310
 #define LEN_DICT 2048
 #define FPS 15
-#define UPDATES_PER_FRAME 2000
 #define NUM_SAND 1654
 #define BOARD_R 68
 #define BOARD_C 136
@@ -71,12 +70,18 @@ lv_img_dsc_t frame = {.header.cf = LV_IMG_CF_INDEXED_1BIT,
                       .data_size = FRAME_L,
                       .data = board_bits};
 void anim_work_handler(struct k_work *work) {
-    for (int update = 0; update < NUM_SAND; update++) {
+    for (int s_left = NUM_SAND - 1; s_left > 0; s_left--) {
+        // LCG to pick index of sand grain to shuffle
         lcg = lcg * 22695477 + 1;
-        uint16_t sand_idx = lcg % NUM_SAND;
+        // Fisher-Yates shuffle the sand array
+        uint16_t sand_idx = lcg % s_left;
         uint8_t *sand_selected = sand_coords[sand_idx];
+        uint8_t *sand_current = sand_coords[s_left];
+        // Swapped element is to be updated
         uint8_t row = sand_selected[1];
         uint8_t col = sand_selected[0];
+        sand_selected[0] = sand_current[0];
+        sand_selected[1] = sand_current[1];
         bool update = false;
         uint8_t nr, nc;
         if (!board[row][col + direction]) {
@@ -117,8 +122,11 @@ void anim_work_handler(struct k_work *work) {
             bit_idx = temp & 0x7;
             board_bits[byte_idx] ^= (0x80 >> bit_idx);
             // Updating sand
-            sand_selected[0] = nc;
-            sand_selected[1] = nr;
+            sand_current[0] = nc;
+            sand_current[1] = nr;
+        } else {
+            sand_current[0] = col;
+            sand_current[1] = row;
         }
     }
     lv_canvas_draw_img(video, 0, 0, &frame, &img_dsc);

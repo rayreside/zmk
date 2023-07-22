@@ -67,9 +67,8 @@
 
 &mt {
   compatible = "zmk,behavior-hold-tap";
-  tapping-term-ms = <60>;
+  tapping-term-ms = <100>;
   quick_tap_ms = <200>;
-  retro-tap;
   flavor = "balanced";
 };
 

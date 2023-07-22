@@ -17,7 +17,8 @@
     "stdint.h": "c",
     "endpoints.h": "c",
     "lz4.h": "c",
-    "ostream": "c"
+    "ostream": "c",
+    "regex": "c"
   },
   "python.formatting.provider": "black",
   "[c]": {
