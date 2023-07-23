@@ -25,10 +25,10 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define LEN_FRAMES 94310
 #define LEN_DICT 2048
 #define FPS 15
-#define UPDATES_PER_FRAME 5
 #define BOARD_R 68
 #define BOARD_C 136
 #define FRAME_L (BOARD_R * BOARD_C / 8 + 8)
+
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 static const uint16_t ms_per_frame = 1000 / FPS;
 struct peripheral_status_state {
@@ -47,14 +47,15 @@ static lv_obj_t *video;
 K_WORK_DEFINE(anim_work, anim_work_handler);
 
 void anim_expiry_function() { k_work_submit(&anim_work); }
-#define FRAME_SIZE (ANIM_SIZE * ANIM_SIZE / 8 + 8)
 K_TIMER_DEFINE(anim_timer, anim_expiry_function, NULL);
 #define MAZE_WIDTH 68
 #define MAZE_HEIGHT 34
 #define MAZE_AREA (MAZE_WIDTH * MAZE_HEIGHT / 4)
+#define NUM_THREADS 3
 static uint8_t maze[MAZE_HEIGHT][MAZE_WIDTH];
-static int16_t stack[MAZE_AREA][2];
-static uint16_t stack_top = 0;
+static uint32_t lcg = 0;
+static uint16_t stack_top[NUM_THREADS];
+static uint16_t stack[MAZE_AREA][NUM_THREADS][2];
 typedef enum { NORTH = 1, SOUTH = 2, EAST = 4, WEST = 8, WALL = 16, VISITED = 32 } Direction;
 static uint8_t perms[24][4] = {
     {NORTH, SOUTH, EAST, WEST}, {SOUTH, NORTH, EAST, WEST}, {EAST, NORTH, SOUTH, WEST},
@@ -65,6 +66,23 @@ static uint8_t perms[24][4] = {
     {WEST, EAST, NORTH, SOUTH}, {NORTH, EAST, WEST, SOUTH}, {EAST, NORTH, WEST, SOUTH},
     {SOUTH, NORTH, WEST, EAST}, {NORTH, SOUTH, WEST, EAST}, {WEST, SOUTH, NORTH, EAST},
     {SOUTH, WEST, NORTH, EAST}, {NORTH, WEST, SOUTH, EAST}, {WEST, NORTH, SOUTH, EAST}};
+lv_img_dsc_t frame = {.header.cf = LV_IMG_CF_INDEXED_1BIT,
+                      .header.always_zero = 0,
+                      .header.reserved = 0,
+                      .header.w = BOARD_C,
+                      .header.h = BOARD_R,
+                      .data_size = FRAME_L,
+                      .data = board_bits};
+uint32_t get_rand() {
+    lcg = lcg * 22695477 + 1;
+    return lcg;
+}
+void set_pixel_at(int16_t row, uint16_t col) {
+    int16_t temp = row * BOARD_C + col;
+    int16_t byte_idx = (temp >> 3) + 8;
+    int8_t bit_idx = temp & 0x7;
+    board_bits[byte_idx] |= (0x80 >> bit_idx);
+}
 void set_block_at(int16_t row, int16_t col) {
     row = row * 2;
     col = col * 2;
@@ -73,29 +91,29 @@ void set_block_at(int16_t row, int16_t col) {
     set_pixel_at(row, col + 1);
     set_pixel_at(row + 1, col + 1);
 }
-void set_pixel_at(int16_t row, uint16_t col) {
-    int16_t temp = row * BOARD_C + col;
-    int16_t byte_idx = (temp >> 3) + 8;
-    int8_t bit_idx = temp & 0x7;
-    board_bits[byte_idx] |= (0x80 >> bit_idx);
-}
-void push(int16_t row, int16_t col) {
-    stack[stack_top][0] = row;
-    stack[stack_top][1] = col;
+void push(int16_t row, int16_t col, uint8_t thread) {
+    if (((row & 1) || (col & 1)) || (maze[row][col] & VISITED)) {
+        return;
+    }
+    uint16_t st = stack_top[thread];
+    stack[st][thread][0] = row;
+    stack[st][thread][1] = col;
     maze[row][col] |= VISITED;
     set_block_at(row, col);
-    stack_top++;
+    stack_top[thread]++;
 }
-void pop(int16_t *row, int16_t *col) {
-    *row = stack[stack_top - 1][0];
-    *col = stack[stack_top - 1][1];
-    stack_top--;
+void pop(int16_t *row, int16_t *col, uint8_t thread) {
+    uint16_t st = stack_top[thread];
+    *row = stack[st - 1][thread][0];
+    *col = stack[st - 1][thread][1];
+    stack_top[thread]--;
 }
-void peek(int16_t *row, int16_t *col) {
-    *row = stack[stack_top - 1][0];
-    *col = stack[stack_top - 1][1];
+void peek(int16_t *row, int16_t *col, uint8_t thread) {
+    uint16_t st = stack_top[thread];
+    *row = stack[st - 1][thread][0];
+    *col = stack[st - 1][thread][1];
 }
-int8_t x_offset(uint8_t dir) {
+int16_t x_offset(uint8_t dir) {
     switch (dir) {
     case EAST:
         return 1;
@@ -105,7 +123,7 @@ int8_t x_offset(uint8_t dir) {
         return 0;
     }
 }
-int8_t y_offset(uint8_t dir) {
+int16_t y_offset(uint8_t dir) {
     switch (dir) {
     case SOUTH:
         return 1;
@@ -129,68 +147,81 @@ uint8_t opposite(uint8_t dir) {
     return 0;
 }
 uint8_t make_maze_step() {
-    if (stack_top == 0) {
-        return 0;
-    }
     int16_t row, col;
-    uint8_t *order = perms[lcg % 24];
-    lcg = lcg * 22695477 + 1;
-    do {
-        peek(&row, &col);
-        uint8_t val = maze[row][col];
-        for (int i = 0; i < 4; i++) {
-            uint8_t dir = order[i];
-            int16_t r_offset = y_offset(dir);
-            int16_t c_offset = x_offset(dir);
-            int16_t new_r = row + r_offset * 2;
-            int16_t new_c = (int16_t)col + c_offset * 2;
-            if (new_r < 0 || new_r >= MAZE_HEIGHT || new_c < 0 || new_c >= MAZE_WIDTH) {
-                continue;
-            }
-            if ((val & dir) || maze[new_r][new_c] & VISITED) {
-                continue;
-            }
-            maze[row][col] |= (dir | VISITED);
-            maze[row + r_offset][col + c_offset] |= VISITED;
-            maze[new_r][new_c] |= opposite(dir);
-            set_block_at(row, col);
-            set_block_at(row + r_offset, col + c_offset);
-            push(new_r, new_c);
-            return 1;
+    uint8_t updated = NUM_THREADS;
+    for (int thread = 0; thread < NUM_THREADS; thread++) {
+        if (stack_top[thread] == 0) {
+            updated--;
+            continue;
         }
-        stack_top--;
-    } while (stack_top > 0);
-    return 0;
+        uint8_t *order = perms[get_rand() % 24];
+        do {
+            peek(&row, &col, thread);
+            uint8_t val = maze[row][col];
+            for (int i = 0; i < 4; i++) {
+                // Calculating row col of next block to look at
+                uint8_t dir = order[i];
+                int16_t r_offset = y_offset(dir);
+                int16_t c_offset = x_offset(dir);
+                int16_t new_r = row + (r_offset << 1);
+                int16_t new_c = col + (c_offset << 1);
+                // Checking bounds and visited status
+                if (new_r < 0 || new_r >= MAZE_HEIGHT || new_c < 0 || new_c >= MAZE_WIDTH ||
+                    (val & dir) || maze[new_r][new_c] & VISITED) {
+                    continue;
+                }
+                // If able to visit, mark block as visited and update display buffer
+                maze[row][col] |= (dir | VISITED);
+                maze[row + r_offset][col + c_offset] |= VISITED;
+                maze[new_r][new_c] |= opposite(dir);
+                set_block_at(row, col);
+                set_block_at(row + r_offset, col + c_offset);
+                push(new_r, new_c, thread);
+                goto EXIT;
+            }
+            stack_top[thread]--;
+        } while (stack_top[thread] > 0);
+    EXIT:;
+    }
+    return updated;
 }
 void init_maze() {
+    // Resetting counters
+    frame_counter = 0;
+
+    // Clearing the backing array
     for (int r = 0; r < MAZE_HEIGHT; r++) {
         for (int c = 0; c < MAZE_WIDTH; c++) {
             maze[r][c] = WALL;
         }
     }
+    // Clearing the frame buffer
     for (int i = 8; i < FRAME_L; i++) {
-        board_bits[i] = 0x0;
+        board_bits[i] = 0;
     }
-    uint16_t start_r = lcg % MAZE_HEIGHT;
-    uint16_t start_c = (lcg >> 16) % MAZE_WIDTH;
-    push(start_r, start_c);
+    // Initializing the worker threads
+    for (int i = 0; i < NUM_THREADS; i++) {
+        uint32_t rand_start = get_rand();
+        // Starting position must be even
+        uint16_t start_r = (rand_start % MAZE_HEIGHT) & 0xFFFE;
+        uint16_t start_c = ((rand_start >> 16) % MAZE_WIDTH) & 0xFFFE;
+        // Clearing worker stacks
+        stack_top[i] = 0;
+        push(start_r, start_c, i);
+    }
 }
-lv_img_dsc_t frame = {.header.cf = LV_IMG_CF_INDEXED_1BIT,
-                      .header.always_zero = 0,
-                      .header.reserved = 0,
-                      .header.w = BOARD_C,
-                      .header.h = BOARD_R,
-                      .data_size = FRAME_L,
-                      .data = board_bits};
 void anim_work_handler(struct k_work *work) {
-    for (int i = 0; i < UPDATES_PER_FRAME; i++) {
-        if (!make_maze_step()) {
-            frame_counter++;
-            if (frame_counter == FPS) {
-                frame_counter = 0;
-                init_maze();
-            }
-            break;
+    // Speed up remaining workers if one terminates
+    uint8_t num_stopped = NUM_THREADS - make_maze_step();
+    if (num_stopped == NUM_THREADS) {
+        frame_counter++;
+        if (frame_counter == FPS) {
+            frame_counter = 0;
+            init_maze();
+        }
+    } else {
+        for (uint8_t iters = 0; iters < num_stopped; iters++) {
+            num_stopped = NUM_THREADS - make_maze_step();
         }
     }
     lv_canvas_draw_img(video, 0, 0, &frame, &img_dsc);
@@ -206,7 +237,7 @@ static void draw_top(lv_obj_t *widget, lv_color_t cbuf[], struct status_state st
     lv_draw_rect_dsc_t rect_black_dsc;
     init_rect_dsc(&rect_black_dsc, LVGL_BACKGROUND);
 
-    // Fill background
+    // Fill battery background
     lv_canvas_draw_rect(canvas, 0, 0, DISP_WIDTH, BATTERY_HEIGHT + 3, &rect_black_dsc);
 
     // Draw battery
@@ -288,7 +319,6 @@ int zmk_widget_status_init(struct zmk_widget_status *widget, lv_obj_t *parent) {
     lv_obj_align(video, LV_ALIGN_TOP_LEFT, 0, 0);
     lv_canvas_set_buffer(video, widget->vbuf, 136, DISP_WIDTH, LV_IMG_CF_TRUE_COLOR);
     lv_draw_img_dsc_init(&img_dsc);
-    frame_counter = 0;
     lcg = sys_rand32_get();
     init_maze();
     //  Starting animation timer
