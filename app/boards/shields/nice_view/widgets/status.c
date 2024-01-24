@@ -236,10 +236,8 @@ static void draw_layer(lv_obj_t *widget, lv_color_t cbuf[], struct status_state 
 
     // Draw layer
     if (state.layer_label == NULL) {
-        char text[9] = {};
-
-        sprintf(text, "LAYER %i", state.layer_index);
-
+        char text[4] = {};
+        sprintf(text, "L%i", state.layer_index);
         lv_canvas_draw_text(canvas, 0, 5, 68, &label_dsc, text);
     } else {
         lv_canvas_draw_text(canvas, 0, 5, 68, &label_dsc, state.layer_label);
