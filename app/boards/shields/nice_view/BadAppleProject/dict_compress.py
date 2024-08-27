@@ -59,7 +59,7 @@ def RLE_encoding(arr, bits):
 def main():
     random.seed(1)
     # Read the video from specified path
-    cam = cv2.VideoCapture("./BadApple128x64.gif")
+    cam = cv2.VideoCapture("./catjam.gif")
     max = 5000 # Which frame to stop at
     # Clustering Algorithm configs
     clusters = 2048 # Number of 8x8 blocks to keep in dictionary

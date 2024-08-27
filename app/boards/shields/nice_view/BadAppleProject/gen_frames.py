@@ -87,7 +87,7 @@ def RLE_encoding_run(img):
     encoded.append(0)
     return np.array(encoded, dtype=np.uint16)
 # Read the video from specified path
-cam = cv2.VideoCapture("./BadApple64x64_10fps.mp4")
+cam = cv2.VideoCapture("./catjam2.mp4")
 # frame
 currentframe = 0
 max = 2500
